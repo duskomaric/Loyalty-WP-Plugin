@@ -130,7 +130,7 @@ class Loyalty_Plugin
         ?>
 
         <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
-            <label for="card_number"><?php esc_html_e('Loyalty Bonus', 'text-domain'); ?> <span
+            <label for="card_number"><?php esc_html_e('Loyalty Kartica', 'text-domain'); ?> <span
                         class="required">*</span></label>
             <input type="number" class="woocommerce-Input woocommerce-Input--text input-text" name="card_number"
                    id="card_number" value="<?php echo esc_attr($card_number); ?>"/>
