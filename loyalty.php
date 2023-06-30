@@ -21,7 +21,9 @@ class Loyalty_Plugin
         $this->password = get_option('loyalty_password');
         $this->base_api_endpoint_path = get_option('loyalty_base_api_path');
         add_action('woocommerce_edit_account_form', array($this, 'add_card_number_field_to_account'));
-        add_action('woocommerce_save_account_details', array($this, 'save_card_number_field_value'));
+        //add_action('woocommerce_save_account_details', array($this, 'save_card_number_field_value'));
+        //add_action('user_register', array($this, 'createUser'));
+        add_action('woocommerce_save_account_details', array($this, 'editUser'));
 
         add_action('wc_points_rewards_after_increase_points', array($this, 'points_increased'), 10, 6);
         add_action('reduce_points_custom_hook', array($this, 'points_reduced'), 10, 6);
@@ -32,6 +34,134 @@ class Loyalty_Plugin
                 'callback' => array($this, 'loyalty_plugin_update_user_meta')
             ));
         });
+    }
+
+//    public function createUser($user_id)
+//    {
+//        define("KREIRAJ_KORISNIKA", $this->base_api_endpoint_path . '/kreirajKorisnika/');
+//
+//        add_filter('https_ssl_verify', '__return_false');
+//        add_filter('https_local_ssl_verify', '__return_false');
+//
+//        $retry_count = 0;
+//        $max_retry_attempts = 5;
+//        $response_code = null;
+//
+//        $user_data = get_userdata($user_id);
+//
+//        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+//
+//            $response = wp_remote_get(
+//                KREIRAJ_KORISNIKA .
+//                '?ime=' . $user_data->first_name .
+//                '&prezime=' . $user_data->last_name .
+//                '&email=' . $user_data->user_email .
+//                '&idkorisnikweb=' . $user_data->ID .
+//                '&username=' . $this->username .
+//                '&password=' . base64_encode($this->password),
+//                array(
+//                    'headers' => array(
+//                        'Content-Type' => 'application/json'
+//                    ),
+//                    'timeout' => 30
+//                ));
+//
+//            $response_code = wp_remote_retrieve_response_code($response);
+//            $retry_count++;
+//
+//            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+//                sleep(3);
+//            }
+//        }
+//    }
+
+    public function editUser($user_id)
+    {
+        define("KREIRAJ_KORISNIKA", $this->base_api_endpoint_path . '/kreirajKorisnika/');
+
+        add_filter('https_ssl_verify', '__return_false');
+        add_filter('https_local_ssl_verify', '__return_false');
+
+        $retry_count = 0;
+        $max_retry_attempts = 5;
+        $response_code = null;
+
+        $user_data = get_userdata($user_id);
+
+        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+
+            $response = wp_remote_get(
+                KREIRAJ_KORISNIKA .
+                '?ime=' . $user_data->first_name .
+                '&prezime=' . $user_data->last_name .
+                '&email=' . $user_data->user_email .
+                '&idkorisnikweb=' . $user_data->ID .
+                '&brojkarticestarikor=' . $_REQUEST['card_number'] .
+                '&username=' . $this->username .
+                '&password=' . base64_encode($this->password),
+                array(
+                    'headers' => array(
+                        'Content-Type' => 'application/json'
+                    ),
+                    'timeout' => 30
+                ));
+
+            $response_code = wp_remote_retrieve_response_code($response);
+            $retry_count++;
+
+            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+                sleep(3);
+            }
+        }
+
+        if (empty($_REQUEST['card_number'])) {
+            define("KORISNIK", $this->base_api_endpoint_path . '/korisnik/');
+
+            add_filter('https_ssl_verify', '__return_false');
+            add_filter('https_local_ssl_verify', '__return_false');
+
+            $user_response = wp_remote_get(
+                KORISNIK .
+                '?webid=' . $user_id .
+                '&username=' . $this->username .
+                '&password=' . base64_encode($this->password),
+                array(
+                    'headers' => array(
+                        'Content-Type' => 'application/json'
+                    ),
+                    'timeout' => 30
+                ));
+
+            $cardNumber = json_decode(wp_remote_retrieve_body($user_response))[0]->BrojKartice;
+            update_user_meta($user_id, 'card_number', $cardNumber);
+
+            $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
+            WC_Points_Rewards_Manager::set_points_balance($user_id, $ukupnoBodova, 'admin-adjustment');
+        } else {
+            define("KORISNIK", $this->base_api_endpoint_path . '/korisnik/');
+
+            add_filter('https_ssl_verify', '__return_false');
+            add_filter('https_local_ssl_verify', '__return_false');
+
+            $user_response = wp_remote_get(
+                KORISNIK .
+                '?webid=' . $user_id .
+                '&username=' . $this->username .
+                '&password=' . base64_encode($this->password),
+                array(
+                    'headers' => array(
+                        'Content-Type' => 'application/json'
+                    ),
+                    'timeout' => 30
+                ));
+
+            $cardNumber = $_POST['card_number'];
+            update_user_meta($user_id, 'card_number', $cardNumber);
+
+            $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
+            WC_Points_Rewards_Manager::set_points_balance($user_id, $ukupnoBodova, 'admin-adjustment');
+        }
+
     }
 
     public function loyalty_plugin_update_user_meta(WP_REST_Request $request): WP_REST_Response
@@ -139,35 +269,35 @@ class Loyalty_Plugin
         <?php
     }
 
-    public function save_card_number_field_value($user_id): void
-    {
-        if (isset($_POST['card_number'])) {
-            $card_number = wc_clean($_POST['card_number']);
-            update_user_meta($user_id, 'card_number', $card_number);
-
-            define("KORISNIK", $this->base_api_endpoint_path . '/korisnik/');
-
-            add_filter('https_ssl_verify', '__return_false');
-            add_filter('https_local_ssl_verify', '__return_false');
-
-            $user_response = wp_remote_get(
-                KORISNIK .
-                '?brojkartice=' . $card_number .
-                '&webid=' . $user_id .
-                '&username=' . $this->username .
-                '&password=' . base64_encode($this->password),
-                array(
-                    'headers' => array(
-                        'Content-Type' => 'application/json'
-                    ),
-                    'timeout' => 30
-                ));
-                
-            $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
-
-            WC_Points_Rewards_Manager::set_points_balance(get_current_user_id(), $ukupnoBodova, 'admin-adjustment');
-        }
-    }
+//    public function save_card_number_field_value($user_id): void
+//    {
+//        if (isset($_POST['card_number'])) {
+//            $card_number = wc_clean($_POST['card_number']);
+//            update_user_meta($user_id, 'card_number', $card_number);
+//
+//            define("KORISNIK", $this->base_api_endpoint_path . '/korisnik/');
+//
+//            add_filter('https_ssl_verify', '__return_false');
+//            add_filter('https_local_ssl_verify', '__return_false');
+//
+//            $user_response = wp_remote_get(
+//                KORISNIK .
+//                '?brojkartice=' . $card_number .
+//                '&webid=' . $user_id .
+//                '&username=' . $this->username .
+//                '&password=' . base64_encode($this->password),
+//                array(
+//                    'headers' => array(
+//                        'Content-Type' => 'application/json'
+//                    ),
+//                    'timeout' => 30
+//                ));
+//
+//            $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
+//
+//            WC_Points_Rewards_Manager::set_points_balance(get_current_user_id(), $ukupnoBodova, 'admin-adjustment');
+//        }
+//    }
 
     public function save_settings(): void
     {
