@@ -21,9 +21,7 @@ class Loyalty_Plugin
         $this->password = get_option('loyalty_password');
         $this->loyalty_base_api_path = get_option('loyalty_base_api_path');
         add_action('woocommerce_edit_account_form', array($this, 'add_card_number_field_to_account'));
-        //add_action('woocommerce_save_account_details', array($this, 'save_card_number_field_value'));
-        //add_action('user_register', array($this, 'createUser'));
-        //add_action('woocommerce_save_account_details', array($this, 'editUser'));
+
         add_action('woocommerce_register_form', array($this, 'registerForm'));
         add_action('woocommerce_created_customer', array($this, 'createUser'));
 
@@ -39,7 +37,7 @@ class Loyalty_Plugin
     }
 
 
-    public function registerForm()
+    public function registerForm(): void
     {
         echo '<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
             <label for="card_number">Loyalty Kartica<span
@@ -47,80 +45,6 @@ class Loyalty_Plugin
             <input type="number" class="woocommerce-Input woocommerce-Input--text input-text" name="card_number"
                    id="card_number" value="">
         </p>';
-    }
-
-    public function createUser($user_id)
-    {
-        define("KREIRAJ_KORISNIKA", $this->loyalty_base_api_path . '/kreirajKorisnika/');
-
-        add_filter('https_ssl_verify', '__return_false');
-        add_filter('https_local_ssl_verify', '__return_false');
-
-        $retry_count = 0;
-        $max_retry_attempts = 5;
-        $response_code = null;
-
-        $user_data = get_userdata($user_id);
-
-        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-
-            $response = wp_remote_get(
-                KREIRAJ_KORISNIKA .
-                '?ime=' . $user_data->first_name .
-                '&prezime=' . $user_data->last_name .
-                '&email=' . $user_data->user_email .
-                '&idkorisnikweb=' . $user_data->ID .
-                '&brojkarticestarikor=' . $_POST['card_number'] .
-                '&username=' . $this->username .
-                '&password=' . base64_encode($this->password),
-                array(
-                    'headers' => array(
-                        'Content-Type' => 'application/json'
-                    ),
-                    'timeout' => 30
-                ));
-
-            $response_code = wp_remote_retrieve_response_code($response);
-            $retry_count++;
-
-            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-                sleep(3);
-            }
-        }
-
-        define("KORISNIK", $this->loyalty_base_api_path . '/korisnik/');
-        add_filter('https_ssl_verify', '__return_false');
-        add_filter('https_local_ssl_verify', '__return_false');
-        $user_response = wp_remote_get(
-            KORISNIK .
-            '?webid=' . $user_id .
-            '&username=' . $this->username .
-            '&password=' . base64_encode($this->password),
-            array(
-                'headers' => array(
-                    'Content-Type' => 'application/json'
-                ),
-                'timeout' => 30
-            ));
-
-        $cardNumber = json_decode(wp_remote_retrieve_body($user_response))[0]->BrojKartice;
-        update_user_meta($user_id, 'card_number', $cardNumber);
-
-        $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
-//            WC_Points_Rewards_Manager::set_points_balance($user_id, $ukupnoBodova, 'admin-adjustment');
-
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
-
-        $query = $wpdb->prepare(
-            "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
-            $ukupnoBodova,
-            $ukupnoBodova,
-            $user_id,
-            date_default_timezone_get()
-        );
-
-        $wpdb->query($query);
     }
 
     public function loyalty_plugin_update_user_meta(WP_REST_Request $request): WP_REST_Response
@@ -137,103 +61,74 @@ class Loyalty_Plugin
         return new WP_REST_Response(array('success' => true), 200);
     }
 
-    public function points_increased($user_id, $points): void
+    public function createUser($user_id): void
     {
-        $card_number = get_user_meta($user_id, 'card_number', true);
+        $userCreated = $this->createUserApiCall($user_id);
+        error_log('$userCreated' . $userCreated);
 
-        define("UNESI_BODOVE", $this->loyalty_base_api_path . '/unesiBodove/');
+        if ($userCreated) {
+            $userFromApi = $this->checkUserByIdApiCall($user_id);
 
-        add_filter('https_ssl_verify', '__return_false');
-        add_filter('https_local_ssl_verify', '__return_false');
-
-        $retry_count = 0;
-        $max_retry_attempts = 5;
-        $response_code = null;
-
-        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-            $response = wp_remote_get(
-                UNESI_BODOVE .
-                '?brojkartice=' . $card_number .
-                '&skupljenibodovi=' . $points .
-                '&iskoristenibodovi=0' .
-                '&username=' . $this->username .
-                '&password=' . base64_encode($this->password),
-                array(
-                    'headers' => array(
-                        'Content-Type' => 'application/json'
-                    ),
-                    'timeout' => 30
-                ));
-            
-            $response_code = wp_remote_retrieve_response_code($response);
-            $retry_count++;
-
-            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-                sleep(3);
-            }
-        }
-
-        $ukupnoBodova = json_decode(wp_remote_retrieve_body($response))[0]->UkupnoBodova;
-
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
-        $query = $wpdb->prepare(
-            "UPDATE $table_name SET points_balance = %d, points = %d WHERE user_id = %d",
-            $ukupnoBodova,
-            $ukupnoBodova,
-            $user_id
-        );
-        $wpdb->query($query);
-    }
-
-    public function points_reduced($user_id, $points): void
-    {
-        $card_number = get_user_meta($user_id, 'card_number', true);
-
-        define("UNESI_BODOVE", $this->loyalty_base_api_path . '/unesiBodove/');
-
-        add_filter('https_ssl_verify', '__return_false');
-        add_filter('https_local_ssl_verify', '__return_false');
-
-        $retry_count = 0;
-        $max_retry_attempts = 5;
-        $response_code = null;
-
-        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-           
-            $response = wp_remote_get(
-                UNESI_BODOVE .
-                '?brojkartice=' . $card_number .
-                '&skupljenibodovi=0' .
-                '&iskoristenibodovi=' . $points .
-                '&username=' . $this->username .
-                '&password=' . base64_encode($this->password),
-                array(
-                    'headers' => array(
-                        'Content-Type' => 'application/json'
-                    ),
-                    'timeout' => 30
-                ));
-
-            $response_code = wp_remote_retrieve_response_code($response);
-            $retry_count++;
-
-            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
-                sleep(3);
-            }
-
-            $ukupnoBodova = json_decode(wp_remote_retrieve_body($response))[0]->UkupnoBodova;
+            update_user_meta($user_id, 'card_number', $userFromApi['cardNumber']);
 
             global $wpdb;
             $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
+
             $query = $wpdb->prepare(
-                "UPDATE $table_name SET points_balance = %d, points = %d WHERE user_id = %d",
-                $ukupnoBodova,
-                $ukupnoBodova,
-                $user_id
+                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
+                $userFromApi['totalPoints'],
+                $userFromApi['totalPoints'],
+                $user_id,
+                date_default_timezone_get()
             );
             $wpdb->query($query);
         }
+    }
+
+    public function points_increased($user_id, $pointsToIncrease): void
+    {
+        error_log('user id: ' . $user_id . ', pointsToIncrease ' . $pointsToIncrease);
+        $card_number = get_user_meta($user_id, 'card_number', true);
+
+        $enterPointsSuccessful = $this->enterPointsApiCall($card_number, $pointsToIncrease, 0);
+
+//        if ($enterPointsSuccessful) {
+//            $userFromApi = $this->checkUserByIdApiCall($user_id);
+//            error_log('$userFromApi' . print_r($userFromApi, true));
+//
+//            global $wpdb;
+//            $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
+//            $query = $wpdb->prepare(
+//                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
+//                $pointsToIncrease,
+//                $pointsToIncrease,
+//                $user_id,
+//                date_default_timezone_get()
+//            );
+//            $wpdb->query($query);
+//        }
+    }
+
+    public function points_reduced($user_id, $pointsToReduce): void
+    {
+        error_log('user id: ' . $user_id . ', pointsToReduce ' . $pointsToReduce);
+        $card_number = get_user_meta($user_id, 'card_number', true);
+
+        $enterPointsSuccessful = $this->enterPointsApiCall($card_number, 0, $pointsToReduce);
+
+//        if ($enterPointsSuccessful) {
+//            $userFromApi = $this->checkUserByIdApiCall($user_id);
+//            global $wpdb;
+//            $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
+//            $query = $wpdb->prepare(
+//                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
+//                $userFromApi['totalPoints'],
+//                $userFromApi['totalPoints'],
+//                $user_id,
+//                date_default_timezone_get()
+//            );
+//            $wpdb->query($query);
+//        }
     }
 
     public function add_card_number_field_to_account(): void
@@ -251,36 +146,6 @@ class Loyalty_Plugin
 
         <?php
     }
-
-//    public function save_card_number_field_value($user_id): void
-//    {
-//        if (isset($_POST['card_number'])) {
-//            $card_number = wc_clean($_POST['card_number']);
-//            update_user_meta($user_id, 'card_number', $card_number);
-//
-//            define("KORISNIK", $this->loyalty_base_api_path . '/korisnik/');
-//
-//            add_filter('https_ssl_verify', '__return_false');
-//            add_filter('https_local_ssl_verify', '__return_false');
-//
-//            $user_response = wp_remote_get(
-//                KORISNIK .
-//                '?brojkartice=' . $card_number .
-//                '&webid=' . $user_id .
-//                '&username=' . $this->username .
-//                '&password=' . base64_encode($this->password),
-//                array(
-//                    'headers' => array(
-//                        'Content-Type' => 'application/json'
-//                    ),
-//                    'timeout' => 30
-//                ));
-//
-//            $ukupnoBodova = json_decode(wp_remote_retrieve_body($user_response))[0]->UkupnoBodova;
-//
-//            WC_Points_Rewards_Manager::set_points_balance(get_current_user_id(), $ukupnoBodova, 'admin-adjustment');
-//        }
-//    }
 
     public function save_settings(): void
     {
@@ -320,7 +185,6 @@ class Loyalty_Plugin
             }
         }
     }
-
 
     public function loyalty_menu(): void
     {
@@ -387,6 +251,109 @@ class Loyalty_Plugin
             </form>
         </div>
         <?php
+    }
+
+    private function createUserApiCall(int $user_id): bool
+    {
+        define("KREIRAJ_KORISNIKA", $this->loyalty_base_api_path . '/kreirajKorisnika/');
+
+        add_filter('https_ssl_verify', '__return_false');
+        add_filter('https_local_ssl_verify', '__return_false');
+
+        $retry_count = 0;
+        $max_retry_attempts = 5;
+        $response_code = null;
+
+        $user_data = get_userdata($user_id);
+
+        while ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+
+            $response = wp_remote_get(
+                KREIRAJ_KORISNIKA .
+                '?ime=' . $user_data->first_name .
+                '&prezime=' . $user_data->last_name .
+                '&email=' . $user_data->user_email .
+                '&idkorisnikweb=' . $user_data->ID .
+                '&brojkarticestarikor=' . $_POST['card_number'] .
+                '&username=' . $this->username .
+                '&password=' . base64_encode($this->password),
+                array(
+                    'headers' => array(
+                        'Content-Type' => 'application/json'
+                    ),
+                    'timeout' => 30
+                ));
+
+            $response_code = wp_remote_retrieve_response_code($response);
+            $retry_count++;
+
+            if ($response_code !== 200 && $retry_count < $max_retry_attempts) {
+                sleep(3);
+            }
+        }
+
+        if ($response_code === 200) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private function checkUserByIdApiCall(int $user_id): array
+    {
+        define("KORISNIK", $this->loyalty_base_api_path . '/korisnik/');
+        add_filter('https_ssl_verify', '__return_false');
+        add_filter('https_local_ssl_verify', '__return_false');
+        $user_response = wp_remote_get(
+            KORISNIK .
+            '?webid=' . $user_id .
+            '&username=' . $this->username .
+            '&password=' . base64_encode($this->password),
+            array(
+                'headers' => array(
+                    'Content-Type' => 'application/json'
+                ),
+                'timeout' => 30
+            ));
+
+        $response = json_decode(wp_remote_retrieve_body($user_response))[0];
+
+
+        return ['cardNumber' => $response->BrojKartice, 'totalPoints' => $response->UkupnoBodova];
+    }
+
+    private function enterPointsApiCall(int $card_number, int $pointsToIncrease, int $pointsToReduce)
+    {
+        define("UNESI_BODOVE", $this->loyalty_base_api_path . '/unesiBodove/');
+
+        add_filter('https_ssl_verify', '__return_false');
+        add_filter('https_local_ssl_verify', '__return_false');
+
+
+        wp_remote_get(
+            UNESI_BODOVE .
+            '?brojkartice=' . $card_number .
+            '&skupljenibodovi=' . $pointsToIncrease .
+            '&iskoristenibodovi=' . $pointsToReduce .
+            '&username=' . $this->username .
+            '&password=' . base64_encode($this->password),
+            array(
+                'headers' => array(
+                    'Content-Type' => 'application/json'
+                ),
+                'timeout' => 30
+            ));
+
+        error_log(
+            UNESI_BODOVE .
+            '?brojkartice=' . $card_number .
+            '&skupljenibodovi=' . $pointsToIncrease .
+            '&iskoristenibodovi=' . $pointsToReduce .
+            '&username=' . $this->username .
+            '&password=' . base64_encode($this->password)
+        );
+
+        return true;
     }
 }
 
