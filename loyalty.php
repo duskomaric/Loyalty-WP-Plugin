@@ -64,7 +64,6 @@ class Loyalty_Plugin
     public function createUser($user_id): void
     {
         $userCreated = $this->createUserApiCall($user_id);
-        error_log('$userCreated' . $userCreated);
 
         if ($userCreated) {
             $userFromApi = $this->checkUserByIdApiCall($user_id);
@@ -87,48 +86,32 @@ class Loyalty_Plugin
 
     public function points_increased($user_id, $pointsToIncrease): void
     {
-        error_log('user id: ' . $user_id . ', pointsToIncrease ' . $pointsToIncrease);
         $card_number = get_user_meta($user_id, 'card_number', true);
 
-        $enterPointsSuccessful = $this->enterPointsApiCall($card_number, $pointsToIncrease, 0);
+        $userTotalPointsBeforeApiCall = WC_Points_Rewards_Manager::get_users_points($user_id);
+        $this->enterPointsApiCall($card_number, $pointsToIncrease, 0);
+        $userFromApi = $this->checkUserByIdApiCall($user_id);
 
-//        if ($enterPointsSuccessful) {
-//            $userFromApi = $this->checkUserByIdApiCall($user_id);
-//            error_log('$userFromApi' . print_r($userFromApi, true));
-//
-//            global $wpdb;
-//            $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
-//            $query = $wpdb->prepare(
-//                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
-//                $pointsToIncrease,
-//                $pointsToIncrease,
-//                $user_id,
-//                date_default_timezone_get()
-//            );
-//            $wpdb->query($query);
-//        }
+        if ($userTotalPointsBeforeApiCall + (2 * $pointsToIncrease) == $userFromApi['totalPoints']) {
+
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
+            $query = $wpdb->prepare(
+                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
+                $pointsToIncrease,
+                $pointsToIncrease,
+                $user_id,
+                date_default_timezone_get()
+            );
+            $wpdb->query($query);
+        }
     }
 
     public function points_reduced($user_id, $pointsToReduce): void
     {
-        error_log('user id: ' . $user_id . ', pointsToReduce ' . $pointsToReduce);
         $card_number = get_user_meta($user_id, 'card_number', true);
 
-        $enterPointsSuccessful = $this->enterPointsApiCall($card_number, 0, $pointsToReduce);
-
-//        if ($enterPointsSuccessful) {
-//            $userFromApi = $this->checkUserByIdApiCall($user_id);
-//            global $wpdb;
-//            $table_name = $wpdb->prefix . 'wc_points_rewards_user_points';
-//            $query = $wpdb->prepare(
-//                "INSERT INTO $table_name (points_balance, points, user_id, date) VALUES (%d, %d, %d, %s)",
-//                $userFromApi['totalPoints'],
-//                $userFromApi['totalPoints'],
-//                $user_id,
-//                date_default_timezone_get()
-//            );
-//            $wpdb->query($query);
-//        }
+        $this->enterPointsApiCall($card_number, 0, $pointsToReduce);
     }
 
     public function add_card_number_field_to_account(): void
@@ -318,7 +301,6 @@ class Loyalty_Plugin
 
         $response = json_decode(wp_remote_retrieve_body($user_response))[0];
 
-
         return ['cardNumber' => $response->BrojKartice, 'totalPoints' => $response->UkupnoBodova];
     }
 
@@ -343,15 +325,6 @@ class Loyalty_Plugin
                 ),
                 'timeout' => 30
             ));
-
-        error_log(
-            UNESI_BODOVE .
-            '?brojkartice=' . $card_number .
-            '&skupljenibodovi=' . $pointsToIncrease .
-            '&iskoristenibodovi=' . $pointsToReduce .
-            '&username=' . $this->username .
-            '&password=' . base64_encode($this->password)
-        );
 
         return true;
     }
