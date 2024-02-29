@@ -14,12 +14,14 @@ use Loyalty\includes\LoyaltyApi;
 use Loyalty\includes\LoyaltySettingsPage;
 use Loyalty\includes\LoyaltyCheckRequiredPlugins;
 use Loyalty\includes\LoyaltyUserRegistration;
+use Loyalty\includes\LoyaltySyncBalance;
 use Loyalty\includes\LoyaltyRestApi;
 
 require 'includes/LoyaltySettingsPage.php';
 require 'includes/LoyaltyCheckRequiredPlugins.php';
 require 'includes/LoyaltyApi.php';
 require 'includes/LoyaltyUserRegistration.php';
+require 'includes/LoyaltySyncBalance.php';
 require 'includes/LoyaltyRestApi.php';
 
 class Loyalty_Plugin
@@ -33,6 +35,7 @@ class Loyalty_Plugin
         new LoyaltySettingsPage();
         new LoyaltyCheckRequiredPlugins();
         new LoyaltyUserRegistration();
+		new LoyaltySyncBalance();
 		new LoyaltyRestApi();
     }
 
