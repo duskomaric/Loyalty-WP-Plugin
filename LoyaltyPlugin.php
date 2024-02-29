@@ -14,11 +14,13 @@ use Loyalty\includes\LoyaltyApi;
 use Loyalty\includes\LoyaltySettingsPage;
 use Loyalty\includes\LoyaltyCheckRequiredPlugins;
 use Loyalty\includes\LoyaltyUserRegistration;
+use Loyalty\includes\LoyaltyRestApi;
 
 require 'includes/LoyaltySettingsPage.php';
 require 'includes/LoyaltyCheckRequiredPlugins.php';
 require 'includes/LoyaltyApi.php';
 require 'includes/LoyaltyUserRegistration.php';
+require 'includes/LoyaltyRestApi.php';
 
 class Loyalty_Plugin
 {
@@ -31,6 +33,7 @@ class Loyalty_Plugin
         new LoyaltySettingsPage();
         new LoyaltyCheckRequiredPlugins();
         new LoyaltyUserRegistration();
+		new LoyaltyRestApi();
     }
 
 	public function points_added_callback($user_id, $points, $event_type, $data, $order_id): void
