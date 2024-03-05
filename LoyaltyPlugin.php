@@ -16,6 +16,7 @@ use Loyalty\includes\LoyaltyCheckRequiredPlugins;
 use Loyalty\includes\LoyaltyUserRegistration;
 use Loyalty\includes\LoyaltySyncBalance;
 use Loyalty\includes\LoyaltyRestApi;
+use Loyalty\includes\LoyaltyAddColumnsToUsersTable;
 
 require 'includes/LoyaltySettingsPage.php';
 require 'includes/LoyaltyCheckRequiredPlugins.php';
@@ -23,6 +24,7 @@ require 'includes/LoyaltyApi.php';
 require 'includes/LoyaltyUserRegistration.php';
 require 'includes/LoyaltySyncBalance.php';
 require 'includes/LoyaltyRestApi.php';
+require 'includes/LoyaltyAddColumnsToUsersTable.php';
 
 class Loyalty_Plugin
 {
@@ -31,11 +33,12 @@ class Loyalty_Plugin
 	    add_action('wc_points_rewards_after_increase_points', array($this, 'points_added_callback'), 10, 5);
 	    add_filter('wc_points_rewards_decrease_points', array($this, 'points_deduction_callback'), 10, 5);
 
-        new LoyaltyApi();
+		new LoyaltyApi();
         new LoyaltySettingsPage();
         new LoyaltyCheckRequiredPlugins();
         new LoyaltyUserRegistration();
 		new LoyaltySyncBalance();
+		new LoyaltyAddColumnsToUsersTable();
 		new LoyaltyRestApi();
     }
 
